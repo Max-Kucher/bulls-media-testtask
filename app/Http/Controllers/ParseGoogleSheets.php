@@ -53,14 +53,26 @@ class ParseGoogleSheets extends Controller
 
                 $_sheet_id = $parsed_url[array_key_last($parsed_url)];
 
+                $export_url = $sheet_url . '/export?format=csv&id=' . $_sheet_id . '&gid=' . $gid;
+
                 try {
-                    $csv_iterator = new CsvIterator($sheet_url . '/export?format=csv&id=' . $_sheet_id . '&gid=' . $gid);
+                    $csv_iterator = new CsvIterator($export_url);
                 } catch (\RuntimeException $e) {
                     report($e);
                     continue;
                 }
 
+                $csv_iterator->useFirstRowAsHeader();
 
+                $first_row = true;
+                foreach ($csv_iterator as $row) {
+                    if ($first_row) {
+                        $first_row = false;
+                        continue;
+                    }
+
+                    dd($row);
+                }
             }
         }
 
