@@ -19,12 +19,16 @@ class ColumnFormattingBuilder
         /**
          * Work with formatting (i.e. dates and so on)
          */
-        if (isset($field_data['date_format'])) {
-            $format = $field_data['date_format'];
-            $formatter = fn ($value) => \DateTime::createFromFormat($format, $value)->getTimestamp();
+        if (isset($this->column_data['date_format'])) {
+            $format = $this->column_data['date_format'];
+            $formatter = function ($value) use ($format) {
+                $date_time = \DateTime::createFromFormat($format, $value);
 
-        } elseif (isset($field_data['format_function']) && is_callable($field_data['format_function'])) {
-            $formatter = $field_data['format_function'];
+                return $date_time ? $date_time->getTimestamp() : 0;
+            };
+
+        } elseif (isset($this->column_data['format_function']) && is_callable($this->column_data['format_function'])) {
+            $formatter = $this->column_data['format_function'];
 
         } else {
             /**

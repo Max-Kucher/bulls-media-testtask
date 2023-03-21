@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\SpreadSheetsParsing\CsvIterator;
+use App\Helpers\SpreadSheetsParsing\ModelBuilder;
 use App\Helpers\SpreadSheetsParsing\TableChecker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -13,7 +14,7 @@ class ParseGoogleSheets extends Controller
      * Handle the incoming request.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function __invoke(Request $request)
     {
@@ -21,6 +22,8 @@ class ParseGoogleSheets extends Controller
          * Get mapping schema
          */
         $map_schema = config('google_sheets_parsing');
+
+        $results = [];
 
         foreach ($map_schema as $sheet_url => $sheet_data) {
             /**
@@ -71,12 +74,27 @@ class ParseGoogleSheets extends Controller
                         continue;
                     }
 
-                    dd($row, $table_checker->getMappedFields());
+                    $model = new ModelBuilder($sheet_list_data['db_table'], $table_checker->getMappedFields());
+                    $model = $model->buildModelObject();
+
+                    foreach ($row as $column_name => $column_value) {
+                        $mapped_column_data = $table_checker->getMappedFields()[$column_name];
+                        $column_value = call_user_func($mapped_column_data['format_function'], $column_value);
+
+                        $model->{$mapped_column_data['table_column']} = $column_value;
+                    }
+
+                    if ($model->save()) {
+                        if (!isset($results[$sheet_list_data['db_table']]['updated'])) {
+                            $results[$sheet_list_data['db_table']]['updated'] = 0;
+                        }
+
+                        $results[$sheet_list_data['db_table']]['updated']++;
+                    }
                 }
             }
         }
 
-        echo 111;
-        die;
+        return response()->json($results);
     }
 }
