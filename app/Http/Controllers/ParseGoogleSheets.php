@@ -71,7 +71,7 @@ class ParseGoogleSheets extends Controller
                         continue;
                     }
 
-                    dd($row);
+                    dd($row, $table_checker->getMappedFields());
                 }
             }
         }

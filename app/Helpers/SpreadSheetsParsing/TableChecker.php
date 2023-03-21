@@ -11,12 +11,17 @@ class TableChecker
     /**
      * @var string $table
      */
-    private $table;
+    private string $table;
 
     /**
      * @var array $fields_schema
      */
-    private $fields_schema;
+    private array $fields_schema;
+
+    /**
+     * @var array $mapped_fields
+     */
+    private array $mapped_fields;
 
     /**
      * @param string $table
@@ -43,22 +48,23 @@ class TableChecker
             Schema::$table_method($this->table, function (Blueprint $table) use ($table_method) {
                 $primary_key_exist = false;
 
-                foreach ($this->fields_schema as $field_data) {
+                foreach ($this->fields_schema as $csv_column_name => $field_data) {
+                    /**
+                     * Check if primary key exists in mapped fields
+                     */
+                    if (in_array($field_data['type'], ['bigIncrements' , 'increments', 'mediumIncrements', 'smallIncrements', 'tinyIncrements'])
+                        || $field_data['db_field'] === 'id'
+                        || (!empty($field_data['additional_modifiers'] && in_array('autoIncrement', $field_data['additional_modifiers'])))
+                    ) {
+                        $primary_key_exist = true;
+                        $this->mapped_fields[$csv_column_name]['is_key'] = true;
+                    }
+
                     /**
                      * If column does not exist -> create column in database
                      */
                     if (!Schema::hasColumn($this->table, $field_data['db_field'])) {
                         $reflection = new \ReflectionMethod($table, $field_data['type']);
-
-                        /**
-                         * Check if primary key exists in table
-                         */
-                        if (in_array($field_data['type'], ['bigIncrements' , 'increments', 'mediumIncrements', 'smallIncrements', 'tinyIncrements'])
-                            || $field_data['db_field'] === 'id'
-                            || (!empty($field_data['additional_modifiers'] && in_array('autoIncrement', $field_data['additional_modifiers'])))
-                        ) {
-                            $primary_key_exist = true;
-                        }
 
                         if ($reflection->getNumberOfParameters()) {
                             $column = $table->{$field_data['type']}($field_data['db_field'], ...($field_data['type_params'] ?? []));
@@ -83,6 +89,11 @@ class TableChecker
                             }
                         }
                     }
+
+                    $this->mapped_fields[$csv_column_name]['table_column'] = $field_data['db_field'];
+
+                    $formatting_builder = new ColumnFormattingBuilder($field_data);
+                    $this->mapped_fields[$csv_column_name]['format_function'] = $formatting_builder->getFormatter();
                 }
 
                 /**
@@ -95,12 +106,19 @@ class TableChecker
 
                         if (isset($indexes['primary'])) {
                             $primary_key_exist = true;
+                            $index_column = current($indexes['primary']->getColumns());
                         }
                     }
 
                     if ($primary_key_exist === false) {
-                        $table->id()->first();
+                        $id_column = $table->id();
+
+                        if ($table_method === 'table') {
+                            $id_column->first();
+                        }
                     }
+
+                    $this->mapped_fields[$index_column ?? 'id']['is_key'] = true;
                 }
             });
         } catch (\Throwable $e) {
@@ -109,5 +127,13 @@ class TableChecker
         }
 
         return true;
+    }
+
+    /**
+     * @return array
+     */
+    public function getMappedFields(): array
+    {
+        return $this->mapped_fields;
     }
 }
